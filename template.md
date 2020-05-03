@@ -171,12 +171,141 @@ L1=[H|T],
 ?-reverse([3,2,1],R). 
  It returns R=[1,2,3]
 
+##### An interesting example game code
+###### A maze "game"
+Rooms were connected to other rooms, and players could walk through them. Each room had a description, and possibly even monsters that mocked you as you passed through.
+
+Anyway, building such a game in Prolog is trivial (save for the monsters). Let's start with some room descriptions:
+```sh
+room(garden, 'Garden', 'You are in the Garden. The trees and shrubs appear...').
+room(hallway, 'Hallway', 'You are in the Hallway. Dusty broken lamps and flower pots...').
+room(kitchen, 'Kitchen', 'You are in the kitchen. Knives, pots, pans, ...').
+room(library, 'Library', 'You are among many books in the Library...').
+room(lair, 'Lair', 'You have found an apparently quite evil lair, of all things...').
+connected(north, library, hallway).
+connected(south, hallway, library).
+connected(down, library, lair).
+connected(up, lair, library).
+connected(west, library, garden).
+connected(east, garden, library).
+connected(west, hallway, kitchen).
+connected(east, kitchen, hallway).
+
+```
+We'll add a predicate that causes the description of our room to be printed:
+
+
+```sh 
+% this predicate has no inputs
+print_location :-
+    current_room(Current),
+    room(Current, Name, Description),
+    % nl means "newline"
+    print(Name), nl, print(Description), nl.
+```
+
+This predicate requires that current_room is a predicate that gives the current room. E.g., current_room(library).
+
+But the current room should change, naturally. We can change the facts of the database in the middle of running the program by using retract and assertz. The retract predicate ("meta-predicate" technically) takes as input a predicate and removes it from current facts. On the other hand, assertz adds a predicate to the list of facts, at the bottom of the list (that's what the z means; the alternative is to add the new fact at the top, in which case you use asserta).
+
+We have to indicate that the current_room predicate may be changed, so we put this in our file:
+
+```sh 
+:- dynamic current_room/1.
+```
+Now we can define a change room predicate:
+```sh 
+change_room(NewRoom) :-
+    current_room(Current),
+    retract(current_room(Current)),
+    assertz(current_room(NewRoom)).
+```
+We'll want user input. Here is a quick & dirty way that supports the word "go" followed by a direction:
+
+
+
+```sh 
+:- use_module(library(readln)).
+
+:- prompt(_, 'Type a command (or ''help''): ').
+
+strip_punctuation([], []).
+
+strip_punctuation([Word|Tail], [Word|Result]) :-
+    \+(member(Word, ['.', ',', '?', '!'])),
+    strip_punctuation(Tail, Result).
+
+strip_punctuation([_|Tail], Result) :-
+    strip_punctuation(Tail, Result).
+
+read_sentence(Input) :-
+    % this is a special predicate from the readln library
+    readln(Input1, _, ".!?", "_0123456789", lowercase),
+    strip_punctuation(Input1, Input).
+
+get_input :- read_sentence(Input), get_input(Input).
+get_input([quit]).
+get_input(Input) :-
+    process_input(Input), print_location,
+    read_sentence(Input1), get_input(Input1).
+
+process_input([help]) :- print('Help...'), nl.
+
+process_input([go, Direction]) :-
+    current_room(Current),
+    connected(Direction, Current, NewRoom),
+    change_room(NewRoom).
+
+process_input([go, _]) :-
+    print('No exit that direction.'), nl.
+process_input([_]) :-
+    print('Huh?'), nl, nl.
+```
+
+Finally, we define a play predicate that starts the whole thing:
+```sh 
+play :-
+    retractall(current_room(_)),
+    assertz(current_room(library)),
+    print_location,
+    get_input.
+```
+Here is how we play:
+```sh 
+?- play.
+Library
+You are among many books in the Library...
+Type a command (or 'help'): go west.
+Garden
+You are in the Garden. The trees and shrubs appear...
+Type a command (or 'help'): go bizarre.
+No exit that direction.
+Garden
+You are in the Garden. The trees and shrubs appear...
+Type a command (or 'help'): help.
+Help...
+Garden
+You are in the Garden. The trees and shrubs appear...
+Type a command (or 'help'): go east.
+Library
+You are among many books in the Library...
+Type a command (or 'help'): go down.
+Lair
+You have found an apparently quite evil lair, of all things...
+Type a command (or 'help'): quit.
+
+true
+```
+
+This example was very interesting and nice to me. I'm impressed.
+
 ###### Resources
 https://www.mta.ca/~rrosebru/oldcourse/371199/prolog/history.html   
   https://www.sjsu.edu/faculty/watkins/prolog.html
 http://alain.colmerauer.free.fr/alcol/ArchivesPublications/PrologHistory/19november92.pdf
   https://www.drdobbs.com/parallel/the-practical-application-of-prolog/184405220
 https://www.swi-prolog.org/build/unix.html
+http://web.cse.ohio-state.edu/~stiff.4/cse3521/prolog-examples.html
 
 
 
